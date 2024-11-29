@@ -1,4 +1,5 @@
 import { SQSHandler } from "aws-lambda";
+// import AWS from 'aws-sdk';
 import { SES_EMAIL_FROM, SES_EMAIL_TO, SES_REGION } from "../env";
 import {
   SESClient,
@@ -18,10 +19,10 @@ type ContactDetails = {
   message: string;
 };
 
-const client = new SESClient({ region: SES_REGION});
+const client = new SESClient({ region: "eu-west-1" });
 
 export const handler: SQSHandler = async (event: any) => {
-  console.log("Event ", JSON.stringify(event));
+  console.log("Event ", event);
   for (const record of event.Records) {
     const recordBody = JSON.parse(record.body);
     const snsMessage = JSON.parse(recordBody.Message);
@@ -33,6 +34,10 @@ export const handler: SQSHandler = async (event: any) => {
         const srcBucket = s3e.bucket.name;
         // Object key may have spaces or unicode non-ASCII characters.
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
+        
+        const fileType = srcKey.split('.').pop()?.toLowerCase();
+        
+        if (fileType === "jpeg" || fileType === "png") {
         try {
           const { name, email, message }: ContactDetails = {
             name: "The Photo Album",
@@ -45,7 +50,21 @@ export const handler: SQSHandler = async (event: any) => {
           console.log("ERROR is: ", error);
           // return;
         }
+      } else {
+        try {
+          const { name, email, message }: ContactDetails = {
+            name: "The Photo Album",
+            email: SES_EMAIL_FROM,
+            message: `Image ${srcKey} has been rejected because of an invalid file type`,
+          };
+          const params = sendEmailParams({ name, email, message });
+          await client.send(new SendEmailCommand(params));
+        } catch (error: unknown) {
+          console.log("ERROR is: ", error);
+          // return;
+        }
       }
+    }
     }
   }
 };
@@ -61,10 +80,6 @@ function sendEmailParams({ name, email, message }: ContactDetails) {
           Charset: "UTF-8",
           Data: getHtmlContent({ name, email, message }),
         },
-        // Text: {.           // For demo purposes
-        //   Charset: "UTF-8",
-        //   Data: getTextContent({ name, email, message }),
-        // },
       },
       Subject: {
         Charset: "UTF-8",
@@ -91,7 +106,6 @@ function getHtmlContent({ name, email, message }: ContactDetails) {
   `;
 }
 
- // For demo purposes - not used here.
 function getTextContent({ name, email, message }: ContactDetails) {
   return `
     Received an Email. 📬
