@@ -102,6 +102,18 @@ export class EDAAppStack extends cdk.Stack {
       },
     });
 
+    const deleteImageFn = new lambdanode.NodejsFunction(this, "deleteImageFn", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(10),
+      entry: `${__dirname}/../lambdas/deleteImage.ts`,
+      environment: {
+        TABLE_NAME: "Images", 
+        BUCKET_NAME: imagesBucket.bucketName, 
+        REGION: "eu-west-1",
+      },
+    });
+
     const newImageEventSource = new events.SqsEventSource(imageProcessQueue, {
       batchSize: 5,
       maxBatchingWindow: cdk.Duration.seconds(5),
@@ -117,6 +129,18 @@ export class EDAAppStack extends cdk.Stack {
       maxBatchingWindow: cdk.Duration.seconds(8),
     });
 
+    const deleteImageEventSource = new events.SqsEventSource(imageProcessQueue, {
+      batchSize: 5,
+      maxBatchingWindow: cdk.Duration.seconds(5),
+    });
+
+    // Added Event notiification, so that when the SNS event goes off, delete image is run
+    imagesBucket.addEventNotification(
+      s3.EventType.OBJECT_REMOVED,
+      new s3n.LambdaDestination(deleteImageFn)
+    );
+
+    deleteImageFn.addEventSource(deleteImageEventSource);
     processImageFn.addEventSource(newImageEventSource);
     confirmationMailerFn.addEventSource(newImageMailEventSource);
     rejectionMailerFn.addEventSource(rejectionMailEventSource);
@@ -135,6 +159,8 @@ export class EDAAppStack extends cdk.Stack {
     imagesTable.grantReadWriteData(processImageFn);
     imagesBucket.grantRead(processImageFn);
     imagesTable.grantWriteData(updateTableFn);
+    imagesTable.grantWriteData(deleteImageFn); // To delete items from DynamoDB
+    imagesBucket.grantDelete(deleteImageFn); // To delete objects from S3
 
     confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
