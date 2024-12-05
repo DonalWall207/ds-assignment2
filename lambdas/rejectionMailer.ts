@@ -39,7 +39,7 @@ export const handler: SQSHandler = async (event: any) => {
           if (fileType !== "jpeg" && fileType !== "png") {
           try {
             const { name, email, message }: ContactDetails = {
-              name: "The Picture Database",
+              name: "The Photo Album",
               email: SES_EMAIL_FROM,
               message: `Image ${srcKey} has been rejected because of an invalid file type and will not be placed on the DynamoDB Table`,
             };
